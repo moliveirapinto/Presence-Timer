@@ -87,6 +87,11 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
   private _tickTimer: number | null = null;
   private _pollTimer: number | null = null;
 
+  // Calendar
+  private _calViewDate: Date = new Date();
+  private _calOpen = false;
+  private _onDocClick: ((e: MouseEvent) => void) | null = null;
+
   // DOM refs
   private _elDot!: HTMLDivElement;
   private _elName!: HTMLSpanElement;
@@ -94,11 +99,12 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
   private _elErr!: HTMLDivElement;
   private _elTL!: HTMLDivElement;
   private _elSum!: HTMLDivElement;
-  private _elDpLbl!: HTMLLabelElement;
-  private _elDpIn!: HTMLInputElement;
+  private _elDpLbl!: HTMLSpanElement;
   private _elPrev!: HTMLButtonElement;
   private _elNext!: HTMLButtonElement;
   private _elToday!: HTMLButtonElement;
+  private _elCalBtn!: HTMLButtonElement;
+  private _elCalOverlay!: HTMLDivElement;
 
   constructor() {
     // Empty
@@ -132,6 +138,7 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
   public destroy(): void {
     if (this._tickTimer !== null) clearInterval(this._tickTimer);
     if (this._pollTimer !== null) clearInterval(this._pollTimer);
+    if (this._onDocClick) document.removeEventListener("click", this._onDocClick);
   }
 
   /* --- UI Construction --- */
@@ -147,14 +154,15 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
         <div class="lbl">time in status</div>
         <div class="err" data-ref="err"></div>
       </div>
-      <div class="dp-wrap">
-        <button class="dp-btn" data-ref="prevDay">\u2039</button>
-        <label class="dp-label" data-ref="dpLabel">
-          Today
-          <input type="date" data-ref="dpInput">
-        </label>
-        <button class="dp-btn" data-ref="nextDay">\u203A</button>
-        <button class="dp-today" data-ref="todayBtn">Today</button>
+      <div class="dp-section">
+        <div class="dp-wrap">
+          <button class="dp-btn" data-ref="prevDay">\u2039</button>
+          <span class="dp-label" data-ref="dpLabel">Today</span>
+          <button class="dp-btn" data-ref="nextDay">\u203A</button>
+          <button class="dp-cal-btn" data-ref="calBtn" title="Pick a date"><svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor"><path d="M7 11a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm1 2a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm2-2a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm1 2a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm2-2a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM17 5.5A2.5 2.5 0 0 0 14.5 3h-9A2.5 2.5 0 0 0 3 5.5v9A2.5 2.5 0 0 0 5.5 17h9a2.5 2.5 0 0 0 2.5-2.5v-9zM4 7h12v7.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 4 14.5V7zm1.5-3h9A1.5 1.5 0 0 1 16 5.5V6H4v-.5A1.5 1.5 0 0 1 5.5 4z"/></svg></button>
+          <button class="dp-today" data-ref="todayBtn">Today</button>
+        </div>
+        <div class="cal-overlay" data-ref="calOverlay" style="display:none"></div>
       </div>
       <div class="summary" data-ref="summary"></div>
       <div class="hist">
@@ -168,29 +176,30 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
     this._elErr = this._ref("err") as HTMLDivElement;
     this._elTL = this._ref("timeline") as HTMLDivElement;
     this._elSum = this._ref("summary") as HTMLDivElement;
-    this._elDpLbl = this._ref("dpLabel") as HTMLLabelElement;
-    this._elDpIn = this._ref("dpInput") as HTMLInputElement;
+    this._elDpLbl = this._ref("dpLabel") as HTMLSpanElement;
     this._elPrev = this._ref("prevDay") as HTMLButtonElement;
     this._elNext = this._ref("nextDay") as HTMLButtonElement;
     this._elToday = this._ref("todayBtn") as HTMLButtonElement;
+    this._elCalBtn = this._ref("calBtn") as HTMLButtonElement;
+    this._elCalOverlay = this._ref("calOverlay") as HTMLDivElement;
 
     this._elPrev.addEventListener("click", () => this._shiftDay(-1));
     this._elNext.addEventListener("click", () => this._shiftDay(1));
     this._elToday.addEventListener("click", () => {
       this._selectedDate = new Date();
+      this._calOpen = false;
+      this._elCalOverlay.style.display = "none";
       this._loadDay();
     });
-    this._elDpIn.addEventListener("change", () => {
-      if (this._elDpIn.value) {
-        const parts = this._elDpIn.value.split("-");
-        this._selectedDate = new Date(+parts[0], +parts[1] - 1, +parts[2]);
-        if (this._selectedDate > new Date()) this._selectedDate = new Date();
-        this._loadDay();
+    this._elCalBtn.addEventListener("click", () => this._toggleCalendar());
+    this._elCalOverlay.addEventListener("click", (e) => e.stopPropagation());
+    this._onDocClick = (e: MouseEvent) => {
+      if (this._calOpen && !this._elCalBtn.contains(e.target as Node)) {
+        this._calOpen = false;
+        this._elCalOverlay.style.display = "none";
       }
-    });
-    this._elDpLbl.addEventListener("click", () => {
-      try { this._elDpIn.showPicker(); } catch { this._elDpIn.click(); }
-    });
+    };
+    document.addEventListener("click", this._onDocClick);
   }
 
   private _ref(name: string): HTMLElement {
@@ -381,11 +390,11 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
 
   private _updateDateLabel(): void {
     if (isToday(this._selectedDate)) {
-      this._elDpLbl.childNodes[0].textContent = "Today";
+      this._elDpLbl.textContent = "Today";
       this._elToday.style.display = "none";
       this._elNext.style.visibility = "hidden";
     } else {
-      this._elDpLbl.childNodes[0].textContent = this._selectedDate.toLocaleDateString([], {
+      this._elDpLbl.textContent = this._selectedDate.toLocaleDateString([], {
         weekday: "short",
         month: "short",
         day: "numeric",
@@ -393,7 +402,6 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
       this._elToday.style.display = "";
       this._elNext.style.visibility = "";
     }
-    this._elDpIn.value = toDateStr(this._selectedDate);
   }
 
   private async _loadDay(): Promise<void> {
@@ -414,5 +422,74 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
     if (d > new Date()) return;
     this._selectedDate = d;
     this._loadDay();
+  }
+
+  /* --- Calendar Overlay --- */
+
+  private _toggleCalendar(): void {
+    this._calOpen = !this._calOpen;
+    if (this._calOpen) {
+      this._calViewDate = new Date(this._selectedDate.getFullYear(), this._selectedDate.getMonth(), 1);
+      this._renderCalendar();
+      this._elCalOverlay.style.display = "";
+    } else {
+      this._elCalOverlay.style.display = "none";
+    }
+  }
+
+  private _renderCalendar(): void {
+    const year = this._calViewDate.getFullYear();
+    const month = this._calViewDate.getMonth();
+    const today = new Date();
+    const sel = this._selectedDate;
+    const monthName = new Date(year, month, 1).toLocaleDateString([], { month: "long", year: "numeric" });
+    const firstDow = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const canGoNext = new Date(year, month + 1, 1) <= today;
+
+    let html = `<div class="cal-head">`;
+    html += `<button class="cal-nav" data-action="calPrev">\u2039</button>`;
+    html += `<span class="cal-title">${esc(monthName)}</span>`;
+    html += `<button class="cal-nav${canGoNext ? "" : " cal-nav-dis"}" data-action="calNext">\u203A</button>`;
+    html += `</div><div class="cal-dow-row">`;
+    for (const d of ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]) {
+      html += `<span class="cal-dow">${d}</span>`;
+    }
+    html += `</div><div class="cal-grid">`;
+    for (let i = 0; i < firstDow; i++) html += `<span class="cal-cell"></span>`;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const cellDate = new Date(year, month, d);
+      const isFuture = cellDate > today;
+      const isTdy = cellDate.toDateString() === today.toDateString();
+      const isSel = cellDate.toDateString() === sel.toDateString();
+      let cls = "cal-day";
+      if (isFuture) cls += " cal-dis";
+      if (isTdy) cls += " cal-today";
+      if (isSel) cls += " cal-sel";
+      html += `<button class="${cls}"${isFuture ? " disabled" : ""} data-day="${d}">${d}</button>`;
+    }
+    html += `</div>`;
+    this._elCalOverlay.innerHTML = html;
+
+    this._elCalOverlay.querySelector('[data-action="calPrev"]')
+      ?.addEventListener("click", () => this._shiftCalMonth(-1));
+    if (canGoNext) {
+      this._elCalOverlay.querySelector('[data-action="calNext"]')
+        ?.addEventListener("click", () => this._shiftCalMonth(1));
+    }
+    this._elCalOverlay.querySelectorAll(".cal-day:not(.cal-dis)").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const day = parseInt((btn as HTMLElement).dataset.day || "1", 10);
+        this._selectedDate = new Date(year, month, day);
+        this._calOpen = false;
+        this._elCalOverlay.style.display = "none";
+        this._loadDay();
+      });
+    });
+  }
+
+  private _shiftCalMonth(offset: number): void {
+    this._calViewDate = new Date(this._calViewDate.getFullYear(), this._calViewDate.getMonth() + offset, 1);
+    this._renderCalendar();
   }
 }

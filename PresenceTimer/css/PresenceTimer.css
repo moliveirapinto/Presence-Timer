@@ -12,9 +12,7 @@
 .presence-timer .dp-wrap{display:flex;align-items:center;justify-content:center;gap:6px;margin:14px 12px 4px}
 .presence-timer .dp-btn{width:28px;height:28px;border:none;border-radius:50%;background:#f3f3f3;color:#555;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s}
 .presence-timer .dp-btn:hover{background:#e4e4e4}
-.presence-timer .dp-label{font-size:13px;font-weight:600;color:#333;padding:4px 12px;border-radius:8px;cursor:pointer;position:relative;min-width:120px;text-align:center;transition:background .15s}
-.presence-timer .dp-label:hover{background:#f5f5f5}
-.presence-timer .dp-label input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
+.presence-timer .dp-label{font-size:13px;font-weight:600;color:#333;padding:4px 12px;border-radius:8px;min-width:120px;text-align:center}
 .presence-timer .dp-today{font-size:10px;color:#0078d4;cursor:pointer;border:none;background:none;font-weight:600;letter-spacing:.3px;transition:color .15s}
 .presence-timer .dp-today:hover{color:#005a9e}
 
@@ -39,3 +37,25 @@
 .presence-timer .tl-item:first-child .tl-name{color:#1a1a1a}
 .presence-timer .tl-item:first-child .tl-dur{font-weight:600;color:#555}
 .presence-timer .tl-empty{font-size:11px;color:#bbb;text-align:center;padding:12px 0}
+
+/* Calendar overlay */
+.presence-timer .dp-section{position:relative}
+.presence-timer .dp-cal-btn{width:28px;height:28px;border:none;border-radius:50%;background:transparent;color:#888;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s,color .15s;flex-shrink:0}
+.presence-timer .dp-cal-btn:hover{background:#f3f3f3;color:#0078d4}
+.presence-timer .cal-overlay{position:absolute;top:100%;left:50%;transform:translateX(-50%);z-index:100;background:#fff;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.12),0 2px 8px rgba(0,0,0,.08);padding:12px;width:240px;margin-top:4px;animation:cal-fade .15s ease-out}
+@keyframes cal-fade{from{opacity:0;transform:translateX(-50%) translateY(-4px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+.presence-timer .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.presence-timer .cal-nav{width:28px;height:28px;border:none;border-radius:50%;background:transparent;color:#555;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s;font-family:inherit}
+.presence-timer .cal-nav:hover{background:#f3f3f3}
+.presence-timer .cal-nav-dis{color:#ddd;cursor:default;pointer-events:none}
+.presence-timer .cal-title{font-size:13px;font-weight:600;color:#333}
+.presence-timer .cal-dow-row{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;margin-bottom:2px}
+.presence-timer .cal-dow{font-size:9px;color:#999;font-weight:600;padding:4px 0;text-transform:uppercase}
+.presence-timer .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px}
+.presence-timer .cal-cell,.presence-timer .cal-day{aspect-ratio:1;display:flex;align-items:center;justify-content:center}
+.presence-timer .cal-day{border:none;border-radius:50%;background:transparent;color:#333;font-size:12px;cursor:pointer;transition:background .12s,color .12s;font-family:inherit;padding:0;width:100%}
+.presence-timer .cal-day:hover:not(.cal-dis):not(.cal-sel){background:#f0f0f0}
+.presence-timer .cal-today:not(.cal-sel){font-weight:700;color:#0078d4;position:relative}
+.presence-timer .cal-today:not(.cal-sel)::after{content:'';position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:#0078d4}
+.presence-timer .cal-sel{background:#0078d4!important;color:#fff!important;font-weight:600}
+.presence-timer .cal-dis{color:#ccc;cursor:default}
