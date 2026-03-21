@@ -1,12 +1,12 @@
 .presence-timer{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;user-select:none;-webkit-user-select:none;overflow-y:auto;overflow-x:hidden;height:100%;box-sizing:border-box}
 .presence-timer *,.presence-timer *::before,.presence-timer *::after{box-sizing:border-box}
-.presence-timer .card{text-align:center;padding:20px 12px 8px}
-.presence-timer .pill{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:16px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:14px}
-.presence-timer .dot{width:8px;height:8px;border-radius:50%;background:#92c353;flex-shrink:0;animation:pt-pulse 2s ease-in-out infinite}
-@keyframes pt-pulse{0%,100%{opacity:1}50%{opacity:.4}}
-.presence-timer .name{font-size:12px;font-weight:600;color:#333;letter-spacing:.2px;white-space:nowrap}
-.presence-timer .time{font-size:28px;font-weight:200;font-variant-numeric:tabular-nums;color:#1a1a1a;letter-spacing:1.5px;line-height:1.2}
-.presence-timer .lbl{font-size:10px;color:#999;text-transform:uppercase;letter-spacing:1.2px;margin-top:4px}
+.presence-timer .card{text-align:center;padding:28px 16px 0}
+.presence-timer .orb{width:14px;height:14px;border-radius:50%;margin:0 auto 10px;background:#8c8c8c;box-shadow:0 0 10px 3px rgba(140,140,140,.3);animation:pt-pulse 2.5s ease-in-out infinite;transition:background .4s,box-shadow .4s}
+@keyframes pt-pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(.85);opacity:.45}}
+.presence-timer .sname{font-size:13px;font-weight:600;color:#242424;letter-spacing:.3px;margin-bottom:16px}
+.presence-timer .time{font-size:34px;font-weight:200;font-variant-numeric:tabular-nums;color:#111;letter-spacing:2.5px;line-height:1}
+.presence-timer .lbl{font-size:9px;color:#b0b0b0;text-transform:uppercase;letter-spacing:2px;margin-top:6px}
+.presence-timer .accent{width:36px;height:2px;border-radius:1px;margin:20px auto 0;background:#8c8c8c;opacity:.45;transition:background .4s}
 .presence-timer .err{font-size:11px;color:#c4314b;margin-top:8px;display:none}
 
 .presence-timer .dp-wrap{display:flex;align-items:center;justify-content:center;gap:6px;margin:14px 12px 4px}
