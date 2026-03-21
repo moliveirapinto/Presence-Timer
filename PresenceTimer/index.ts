@@ -94,10 +94,9 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
 
   // DOM refs
   private _elDot!: HTMLDivElement;
-  private _elName!: HTMLDivElement;
+  private _elName!: HTMLSpanElement;
   private _elClock!: HTMLDivElement;
   private _elErr!: HTMLDivElement;
-  private _elAccent!: HTMLDivElement;
   private _elTL!: HTMLDivElement;
   private _elSum!: HTMLDivElement;
   private _elDpLbl!: HTMLSpanElement;
@@ -147,11 +146,12 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
   private _buildUI(): void {
     this._container.innerHTML = `
       <div class="card">
-        <div class="orb" data-ref="dot"></div>
-        <div class="sname" data-ref="sName">Loading\u2026</div>
+        <div class="pill">
+          <div class="dot" data-ref="dot"></div>
+          <span class="name" data-ref="sName">Loading\u2026</span>
+        </div>
         <div class="time" data-ref="clock">00:00:00</div>
-        <div class="lbl">elapsed</div>
-        <div class="accent" data-ref="accentBar"></div>
+        <div class="lbl">time in status</div>
         <div class="err" data-ref="err"></div>
       </div>
       <div class="dp-section">
@@ -171,10 +171,9 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
       </div>`;
 
     this._elDot = this._ref("dot") as HTMLDivElement;
-    this._elName = this._ref("sName") as HTMLDivElement;
+    this._elName = this._ref("sName") as HTMLSpanElement;
     this._elClock = this._ref("clock") as HTMLDivElement;
     this._elErr = this._ref("err") as HTMLDivElement;
-    this._elAccent = this._ref("accentBar") as HTMLDivElement;
     this._elTL = this._ref("timeline") as HTMLDivElement;
     this._elSum = this._ref("summary") as HTMLDivElement;
     this._elDpLbl = this._ref("dpLabel") as HTMLSpanElement;
@@ -321,11 +320,8 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
   }
 
   private _render(p: { id: string; name: string }): void {
-    const c = color(p.name);
     this._elName.textContent = p.name;
-    this._elDot.style.background = c;
-    this._elDot.style.boxShadow = `0 0 10px 3px ${c}40`;
-    this._elAccent.style.background = c;
+    this._elDot.style.background = color(p.name);
     this._elErr.style.display = "none";
   }
 
