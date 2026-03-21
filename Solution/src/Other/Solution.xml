@@ -5,7 +5,7 @@
     <UniqueName>PresenceTimer</UniqueName>
     <LocalizedNames>
       <!-- Localized Solution Name in language code -->
-      <LocalizedName description="Present Timer" languagecode="1033" />
+      <LocalizedName description="Presence Timer" languagecode="1033" />
     </LocalizedNames>
     <Descriptions />
     <Version>1.0</Version>
