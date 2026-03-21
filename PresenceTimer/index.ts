@@ -113,8 +113,12 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
     this._context = context;
     this._container = container;
     this._container.classList.add("presence-timer");
-    this._buildUI();
-    this._initialize();
+    try {
+      this._buildUI();
+      this._initialize();
+    } catch (e: unknown) {
+      this._container.textContent = `Init error: ${e instanceof Error ? e.message : String(e)}`;
+    }
   }
 
   public updateView(context: ComponentFramework.Context<IInputs>): void {
@@ -217,15 +221,37 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
 
   /* --- Data Access --- */
 
+  private _getWebApi(): { retrieveMultipleRecords: (entity: string, query: string, maxPageSize?: number) => Promise<ComponentFramework.WebApi.RetrieveMultipleResponse> } {
+    // Prefer PCF context.webAPI
+    if (this._context.webAPI) {
+      return this._context.webAPI;
+    }
+    // Fallback: Xrm.WebApi (global in D365 workspace)
+    const xrm = (window as unknown as Record<string, unknown>)["Xrm"] as
+      { WebApi?: { retrieveMultipleRecords: (entity: string, query: string, maxPageSize?: number) => Promise<ComponentFramework.WebApi.RetrieveMultipleResponse> } } | undefined;
+    if (xrm?.WebApi) {
+      return xrm.WebApi;
+    }
+    throw new Error("WebAPI not available in this context");
+  }
+
   private _getUserId(): string {
+    // Try PCF context.userSettings
     const ctx = this._context as ComponentFramework.Context<IInputs> & { userSettings?: { userId?: string } };
     const uid = ctx.userSettings?.userId;
     if (uid) return uid.replace(/[{}]/g, "").toLowerCase();
+
+    // Fallback: Xrm global
+    const xrm = (window as unknown as Record<string, unknown>)["Xrm"] as
+      { Utility?: { getGlobalContext?: () => { userSettings?: { userId?: string } } } } | undefined;
+    const xrmUid = xrm?.Utility?.getGlobalContext?.()?.userSettings?.userId;
+    if (xrmUid) return xrmUid.replace(/[{}]/g, "").toLowerCase();
+
     throw new Error("Cannot determine user ID");
   }
 
   private async _loadPresenceMap(): Promise<void> {
-    const webAPI = this._context.webAPI;
+    const webAPI = this._getWebApi();
     const resp = await webAPI.retrieveMultipleRecords(
       "msdyn_presence",
       "?$select=msdyn_presenceid,msdyn_presencestatustext"
@@ -240,7 +266,7 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
   }
 
   private async _getPresence(): Promise<{ id: string; name: string; since: string | null }> {
-    const webAPI = this._context.webAPI;
+    const webAPI = this._getWebApi();
     const resp = await webAPI.retrieveMultipleRecords(
       "msdyn_agentstatus",
       `?$filter=_msdyn_agentid_value eq ${this._userId}&$select=_msdyn_currentpresenceid_value,msdyn_presencemodifiedon&$top=1`
@@ -257,7 +283,7 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
   }
 
   private async _fetchHistory(date: Date): Promise<ComponentFramework.WebApi.Entity[]> {
-    const webAPI = this._context.webAPI;
+    const webAPI = this._getWebApi();
     const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
     const dayEnd = new Date(dayStart.getTime() + 86400000);
 
