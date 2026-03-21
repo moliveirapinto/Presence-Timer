@@ -17,62 +17,20 @@ A PCF (PowerApps Component Framework) control for **Dynamics 365 Customer Servic
 
 ---
 
-## 📦 Prerequisites
+## 🚀 Installation
 
-| Tool | Version | Download |
-|------|---------|----------|
-| **Node.js** | 18 or later | [nodejs.org](https://nodejs.org/) |
-| **Power Platform CLI** | Latest | [Install instructions](https://learn.microsoft.com/en-us/power-platform/developer/cli/introduction#install-microsoft-power-platform-cli) |
-| **.NET Framework** | 4.6.2+ Developer Pack | [Download](https://dotnet.microsoft.com/en-us/download/dotnet-framework) |
-| **Visual Studio** or **MSBuild** | 2019+ | Needed to build the Solution project |
+### Step 1 — Download the solution
 
----
+1. Go to the [**Releases**](https://github.com/moliveirapinto/Presence-Timer/releases) page
+2. Download the **Solution.zip** file from the latest release
 
-## 🚀 Build & Deploy the Solution
-
-Follow these steps to build the solution ZIP and import it into your Dynamics 365 environment.
-
-### Step 1 — Clone the repository
-
-```bash
-git clone https://github.com/moliveirapinto/Presence-Timer.git
-cd Presence-Timer
-```
-
-### Step 2 — Install dependencies
-
-```bash
-npm install
-```
-
-### Step 3 — Build the PCF control
-
-```bash
-npm run build
-```
-
-> **Tip:** Run `npm start` to test locally in the PCF test harness (note: Dataverse API calls won't work in the harness).
-
-### Step 4 — Build the Dataverse solution ZIP
-
-```bash
-cd Solution
-dotnet build
-```
-
-After a successful build, the solution ZIP file will be generated inside:
-
-```
-Solution/bin/Debug/Solution.zip
-```
-
-### Step 5 — Import the solution into your environment
+### Step 2 — Import the solution into your environment
 
 1. Open [make.powerapps.com](https://make.powerapps.com/)
 2. Select the **environment** where Customer Service workspace is deployed
 3. Go to **Solutions** in the left menu
 4. Click **Import solution**
-5. Click **Browse** and select the `Solution.zip` file you just built
+5. Click **Browse** and select the **Solution.zip** file you downloaded
 6. Click **Next**, then **Import**
 7. Wait for the import to complete — you'll see a success notification
 
@@ -80,7 +38,7 @@ Solution/bin/Debug/Solution.zip
 
 ## ⚙️ Add the Control to the Customer Service Productivity Pane
 
-Once the solution is imported, you need to configure the **productivity pane** so agents can see the Presence Timer inside the Customer Service workspace.
+Once the solution is imported, follow these steps to make the Presence Timer visible to agents.
 
 ### Step 1 — Open Customer Service admin center
 
