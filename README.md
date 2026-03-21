@@ -106,9 +106,6 @@ Presence-Timer/
 │   ├── index.ts                    # Main control logic
 │   └── css/
 │       └── PresenceTimer.css       # Styles
-├── Solution/
-│   ├── Solution.cdsproj            # Dataverse solution project
-│   └── src/                        # Solution metadata
 ├── img/
 │   └── Screenshot.png              # Preview image
 ├── package.json
