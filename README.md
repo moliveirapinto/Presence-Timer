@@ -42,8 +42,7 @@ Once the solution is imported, follow these steps to make the Presence Timer vis
 
 ### Step 1 — Open Customer Service admin center
 
-1. Go to [make.powerapps.com](https://make.powerapps.com/) and select your environment
-2. Open the **Customer Service admin center** app (find it under *Apps* or use the app switcher)
+1. Open the **Customer Service admin center** app
 
 ### Step 2 — Navigate to Productivity Pane settings
 
