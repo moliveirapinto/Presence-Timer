@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <manifest>
-  <control namespace="MauLabs" constructor="PresenceTimer" version="1.0.5" display-name-key="Presence Timer" description-key="Shows current agent presence status with elapsed time, history timeline, and date picker" control-type="standard" >
+  <control namespace="MauLabs" constructor="PresenceTimer" version="1.1.0" display-name-key="Presence Timer" description-key="Shows current agent presence status with elapsed time, history timeline, and date picker" control-type="standard" >
     <external-service-usage enabled="false">
     </external-service-usage>
     <property name="dummyProp" display-name-key="Dummy" description-key="Unused property required by PCF" of-type="SingleLine.Text" usage="input" required="false" />

@@ -1,67 +1,18 @@
 import { IInputs, IOutputs } from "./generated/ManifestTypes";
+import { color, statusIcon, registerPresenceBase } from "./status";
+import {
+  clampSpan, dayBounds, fmtClock, fmtDateTime, fmtShort, fmtTimeRange,
+  isToday, toUtcLiteral,
+} from "./time";
 
+const VERSION = "1.1.0";
 const POLL_MS = 5000;
+/** 1s ticks between automatic refreshes of the "Today" timeline (5 minutes). */
+const DAY_REFRESH_TICKS = 300;
 
-const COLORS: Record<string, string> = {
-  available: "#92c353",
-  busy: "#c4314b",
-  "busy - dnd": "#c4314b",
-  "do not disturb": "#c4314b",
-  away: "#fcd116",
-  "appear away": "#fcd116",
-  offline: "#8c8c8c",
-  inactive: "#8c8c8c",
-  "busy - after conversation work": "#e3008c",
-  "after conversation work": "#e3008c",
-  "dnd-initiating outbound call": "#c4314b",
-  "voice consult dnd": "#c4314b",
-  "do not disturb - after conversation work": "#e3008c",
-};
-
-function color(name: string): string {
-  const l = (name || "").toLowerCase();
-  for (const k of Object.keys(COLORS)) {
-    if (l.indexOf(k) > -1) return COLORS[k];
-  }
-  return "#8c8c8c";
-}
-
-function fmt(ms: number): string {
-  let s = Math.max(0, Math.floor(ms / 1000));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  s = s % 60;
-  return `${h < 10 ? "0" : ""}${h}:${m < 10 ? "0" : ""}${m}:${s < 10 ? "0" : ""}${s}`;
-}
-
-function fmtShort(ms: number): string {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${s % 60}s`;
-  return `${s % 60}s`;
-}
-
-function fmtTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  } catch {
-    return "";
-  }
-}
-
-function fmtTimeRange(startIso: string, endIso: string | null): string {
-  return fmtTime(startIso) + (endIso ? ` \u2013 ${fmtTime(endIso)}` : " \u2013 now");
-}
-
-function isToday(d: Date): boolean {
-  const t = new Date();
-  return d.getFullYear() === t.getFullYear() && d.getMonth() === t.getMonth() && d.getDate() === t.getDate();
-}
-
-function toDateStr(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+/** Skip polling work when the tab is hidden (saves bandwidth + API calls). */
+function isTabHidden(): boolean {
+  return typeof document !== "undefined" && document.visibilityState === "hidden";
 }
 
 function esc(s: string): string {
@@ -83,6 +34,13 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
   private _userId: string | null = null;
   private _selectedDate: Date = new Date();
 
+  private _polling = false;          // reentrancy guard for _poll()
+  private _errStreak = 0;            // consecutive poll failures (for backoff)
+  private _skipCount = 0;            // monotonic tick counter for backoff gating
+  private _bootstrapped = false;     // true once first successful presence read happened
+  private _ticks = 0;                // 1s ticks since init (drives rollover + auto-refresh)
+  private _trackingToday = true;     // false once the user pins a specific past day
+
   // Timers
   private _tickTimer: number | null = null;
   private _pollTimer: number | null = null;
@@ -91,11 +49,13 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
   private _calViewDate: Date = new Date();
   private _calOpen = false;
   private _onDocClick: ((e: MouseEvent) => void) | null = null;
+  private _onVisibility: (() => void) | null = null;
 
   // DOM refs
   private _elDot!: HTMLDivElement;
   private _elName!: HTMLSpanElement;
   private _elClock!: HTMLDivElement;
+  private _elSince!: HTMLDivElement;
   private _elErr!: HTMLDivElement;
   private _elTL!: HTMLDivElement;
   private _elSum!: HTMLDivElement;
@@ -139,6 +99,7 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
     if (this._tickTimer !== null) clearInterval(this._tickTimer);
     if (this._pollTimer !== null) clearInterval(this._pollTimer);
     if (this._onDocClick) document.removeEventListener("click", this._onDocClick);
+    if (this._onVisibility) document.removeEventListener("visibilitychange", this._onVisibility);
   }
 
   /* --- UI Construction --- */
@@ -147,12 +108,13 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
     this._container.innerHTML = `
       <div class="card">
         <div class="pill">
-          <div class="dot" data-ref="dot"></div>
+          <div class="dot" data-ref="dot" role="img"></div>
           <span class="name" data-ref="sName">Loading\u2026</span>
         </div>
-        <div class="time" data-ref="clock">00:00:00</div>
+        <div class="time" data-ref="clock" role="timer">00:00:00</div>
         <div class="lbl">time in status</div>
-        <div class="err" data-ref="err"></div>
+        <div class="since" data-ref="since"></div>
+        <div class="err" data-ref="err" role="status"></div>
       </div>
       <div class="dp-section">
         <div class="dp-wrap">
@@ -168,11 +130,13 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
       <div class="hist">
         <div class="hist-title">Timeline</div>
         <div data-ref="timeline"></div>
-      </div>`;
+      </div>
+      <div style="font-size:9px;color:#999;text-align:right;padding:2px 6px 0 0;opacity:.6">Presence Timer v${VERSION}</div>`;
 
     this._elDot = this._ref("dot") as HTMLDivElement;
     this._elName = this._ref("sName") as HTMLSpanElement;
     this._elClock = this._ref("clock") as HTMLDivElement;
+    this._elSince = this._ref("since") as HTMLDivElement;
     this._elErr = this._ref("err") as HTMLDivElement;
     this._elTL = this._ref("timeline") as HTMLDivElement;
     this._elSum = this._ref("summary") as HTMLDivElement;
@@ -186,7 +150,7 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
     this._elPrev.addEventListener("click", () => this._shiftDay(-1));
     this._elNext.addEventListener("click", () => this._shiftDay(1));
     this._elToday.addEventListener("click", () => {
-      this._selectedDate = new Date();
+      this._setSelectedDate(new Date());
       this._calOpen = false;
       this._elCalOverlay.style.display = "none";
       this._loadDay();
@@ -200,6 +164,21 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
       }
     };
     document.addEventListener("click", this._onDocClick);
+
+    // Polling is suspended while the tab is hidden, and browsers throttle background
+    // timers heavily. Refresh the moment the user comes back instead of showing stale
+    // data until the next interval fires.
+    this._onVisibility = () => {
+      if (isTabHidden()) return;
+      this._errStreak = 0;
+      this._skipCount = 0;
+      void this._poll();
+      if (this._trackingToday) {
+        this._selectedDate = new Date();
+        void this._loadDay();
+      }
+    };
+    document.addEventListener("visibilitychange", this._onVisibility);
   }
 
   private _ref(name: string): HTMLElement {
@@ -209,22 +188,24 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
   /* --- Initialization --- */
 
   private async _initialize(): Promise<void> {
+    // Always wire timers up FIRST so a transient first-call failure can self-heal.
+    this._tickTimer = window.setInterval(() => this._tick(), 1000);
+    this._pollTimer = window.setInterval(() => this._poll(), POLL_MS);
     try {
       this._userId = this._getUserId();
       await this._loadPresenceMap();
       const p = await this._getPresence();
       this._curId = p.id;
       this._start = p.since ? new Date(p.since).getTime() : Date.now();
+      this._bootstrapped = true;
       this._render(p);
+      this._renderSince(p.since);
       this._tick();
-
-      this._tickTimer = window.setInterval(() => this._tick(), 1000);
-      this._pollTimer = window.setInterval(() => this._poll(), POLL_MS);
-
       this._loadDay();
     } catch (e: unknown) {
       this._elName.textContent = "\u2014";
       this._showErr(e instanceof Error ? e.message : String(e));
+      // _poll() will keep retrying — and on first success will trigger _loadDay().
     }
   }
 
@@ -261,16 +242,33 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
 
   private async _loadPresenceMap(): Promise<void> {
     const webAPI = this._getWebApi();
-    const resp = await webAPI.retrieveMultipleRecords(
-      "msdyn_presence",
-      "?$select=msdyn_presenceid,msdyn_presencestatustext"
-    );
+    let resp: ComponentFramework.WebApi.RetrieveMultipleResponse;
+    let hasBase = true;
+    try {
+      resp = await webAPI.retrieveMultipleRecords(
+        "msdyn_presence",
+        "?$select=msdyn_presenceid,msdyn_name,msdyn_presencestatustext,msdyn_basepresencestatus"
+      );
+    } catch (e) {
+      // Older/locked-down orgs may reject msdyn_basepresencestatus — degrade to text matching.
+      console.warn("[PresenceTimer] base presence status unavailable, falling back to text matching", e);
+      hasBase = false;
+      resp = await webAPI.retrieveMultipleRecords(
+        "msdyn_presence",
+        "?$select=msdyn_presenceid,msdyn_presencestatustext"
+      );
+    }
     for (const e of resp.entities) {
-      this._pmap[e.msdyn_presenceid as string] = e.msdyn_presencestatustext as string;
+      const text = (e.msdyn_presencestatustext as string) || (e.msdyn_name as string) || "";
+      this._pmap[e.msdyn_presenceid as string] = text;
+      if (!hasBase) continue;
+      registerPresenceBase(text, e.msdyn_basepresencestatus as number | null);
+      registerPresenceBase(e.msdyn_name as string, e.msdyn_basepresencestatus as number | null);
     }
   }
 
-  private _presenceName(id: string): string {
+  private _presenceName(id: string | null): string {
+    if (!id) return "Offline";
     return this._pmap[id] || "Unknown";
   }
 
@@ -280,49 +278,109 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
       "msdyn_agentstatus",
       `?$filter=_msdyn_agentid_value eq ${this._userId}&$select=_msdyn_currentpresenceid_value,msdyn_presencemodifiedon&$top=1`
     );
-    if (!resp.entities || !resp.entities.length) throw new Error("No agent status record found");
+    // Never throw on missing record / null presence. Render "Offline" instead so the pill
+    // always escapes the "Loading…" state on first paint even when the OmniChannel
+    // agent-status row hasn't been initialized yet.
+    if (!resp.entities || !resp.entities.length) {
+      console.warn("[PresenceTimer] no msdyn_agentstatus row for user", this._userId);
+      return { id: "", name: "Offline", since: null };
+    }
     const rec = resp.entities[0];
     const pid = rec["_msdyn_currentpresenceid_value"] as string;
-    if (!pid) throw new Error("No current presence assigned");
-    return {
-      id: pid,
-      name: this._presenceName(pid),
-      since: (rec["msdyn_presencemodifiedon"] as string) || null,
-    };
+    if (!pid) {
+      console.warn("[PresenceTimer] msdyn_agentstatus has null currentpresenceid for user", this._userId);
+      return { id: "", name: "Offline", since: null };
+    }
+
+    // The authoritative start of the CURRENT status is the still-open history segment
+    // (msdyn_endtime is null), not msdyn_presencemodifiedon — that field can lag or be stale.
+    // Fall back to msdyn_presencemodifiedon when no open segment exists yet.
+    let since: string | null = null;
+    try {
+      const hResp = await webAPI.retrieveMultipleRecords(
+        "msdyn_agentstatushistory",
+        `?$filter=_msdyn_agentid_value eq ${this._userId} and _msdyn_presenceid_value eq ${pid}` +
+        ` and msdyn_endtime eq null` +
+        `&$select=msdyn_starttime&$orderby=msdyn_starttime desc&$top=1`
+      );
+      if (hResp.entities && hResp.entities.length) {
+        since = (hResp.entities[0]["msdyn_starttime"] as string) || null;
+      }
+    } catch { /* fall through to msdyn_presencemodifiedon */ }
+    if (!since) since = (rec["msdyn_presencemodifiedon"] as string) || null;
+
+    return { id: pid, name: this._presenceName(pid), since };
   }
 
   private async _fetchHistory(date: Date): Promise<ComponentFramework.WebApi.Entity[]> {
     const webAPI = this._getWebApi();
-    const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    const dayEnd = new Date(dayStart.getTime() + 86400000);
+    const b = dayBounds(date);
+    const dayStartStr = toUtcLiteral(new Date(b.start));
+    const dayEndStr = toUtcLiteral(new Date(b.end));
 
+    // Match every segment that OVERLAPS the day, not only those that START in it. A status
+    // held across midnight (e.g. Offline since last week) otherwise vanished and the day
+    // rendered as "No activity on this day" while the pill showed hours in that status.
     const filter =
       `_msdyn_agentid_value eq ${this._userId}` +
-      ` and msdyn_starttime ge ${dayStart.toISOString()}` +
-      ` and msdyn_starttime lt ${dayEnd.toISOString()}`;
+      ` and msdyn_starttime lt ${dayEndStr}` +
+      ` and (msdyn_endtime eq null or msdyn_endtime gt ${dayStartStr})`;
     const q =
       `?$filter=${filter}` +
       `&$select=msdyn_starttime,msdyn_endtime,_msdyn_presenceid_value` +
       `&$orderby=msdyn_starttime desc`;
 
-    const all: ComponentFramework.WebApi.Entity[] = [];
     const resp = await webAPI.retrieveMultipleRecords("msdyn_agentstatushistory", q, 5000);
-    if (resp.entities) all.push(...resp.entities);
-    return all;
+    return resp.entities || [];
+  }
+
+  /** Clamp a history segment to the visible day so cross-midnight spans report day-local time. */
+  private _span(r: ComponentFramework.WebApi.Entity): { st: number; en: number } {
+    const rawSt = new Date(r["msdyn_starttime"] as string).getTime();
+    const rawEn = r["msdyn_endtime"] ? new Date(r["msdyn_endtime"] as string).getTime() : null;
+    return clampSpan(rawSt, rawEn, dayBounds(this._selectedDate));
   }
 
   /* --- Rendering --- */
 
   private _tick(): void {
-    if (this._start) {
-      this._elClock.textContent = fmt(Date.now() - this._start);
+    if (this._start) this._elClock.textContent = fmtClock(Date.now() - this._start);
+    // The panel can stay mounted for days. Roll the "Today" view over at midnight and
+    // refresh the day periodically so the still-open segment keeps growing.
+    this._ticks++;
+    if (this._ticks % 30 === 0 && this._trackingToday && !isToday(this._selectedDate)) {
+      this._selectedDate = new Date();
+      void this._loadDay();
+    } else if (this._ticks % DAY_REFRESH_TICKS === 0 && isToday(this._selectedDate) && !isTabHidden()) {
+      void this._loadDay();
     }
   }
 
   private _render(p: { id: string; name: string }): void {
-    this._elName.textContent = p.name;
-    this._elDot.style.background = color(p.name);
-    this._elErr.style.display = "none";
+    // Defensive null-checks — if the panel was destroyed/re-rendered, the cached refs may
+    // be detached. Re-query before bailing.
+    if (!this._elName || !this._elName.isConnected) {
+      const fresh = this._container.querySelector('[data-ref="sName"]') as HTMLElement | null;
+      if (fresh) this._elName = fresh; else return;
+    }
+    this._elName.textContent = p.name || "Unknown";
+    if (this._elDot) {
+      this._elDot.style.background = color(p.name);
+      this._elDot.innerHTML = statusIcon(p.name);
+      this._elDot.setAttribute("aria-label", p.name || "Unknown");
+    }
+    if (this._elErr) this._elErr.style.display = "none";
+  }
+
+  /** Show when the current status started, so a large "time in status" is self-explanatory. */
+  private _renderSince(iso: string | null): void {
+    if (!this._elSince) return;
+    this._elSince.textContent = iso ? fmtDateTime(iso) : "";
+  }
+
+  private _setSelectedDate(d: Date): void {
+    this._selectedDate = d;
+    this._trackingToday = isToday(d);
   }
 
   private _showErr(msg: string): void {
@@ -331,16 +389,42 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
   }
 
   private async _poll(): Promise<void> {
+    // Skip while a previous poll is still in flight (slow WebAPI → no thundering herd).
+    if (this._polling) return;
+    // Skip while tab is hidden — resume immediately when it becomes visible again.
+    if (isTabHidden()) return;
+    // After 3+ failures, back off: only attempt every Nth poll (N = min(6, streak-2)).
+    if (this._errStreak >= 3) {
+      this._skipCount++;
+      const everyN = Math.min(6, this._errStreak - 2);
+      if ((this._skipCount % everyN) !== 0) return;
+    }
+    this._polling = true;
     try {
       const p = await this._getPresence();
-      if (p.id !== this._curId) {
+      const wasBootstrapping = !this._bootstrapped;
+      const since = p.since ? new Date(p.since).getTime() : null;
+      // Resync on presence change AND on a new segment start for the same presence
+      // (A -> B -> A between two polls looks unchanged by id alone, which froze the timer).
+      if (p.id !== this._curId || (since !== null && since !== this._start) || wasBootstrapping) {
         this._curId = p.id;
-        this._start = p.since ? new Date(p.since).getTime() : Date.now();
-        if (isToday(this._selectedDate)) this._loadDay();
+        this._start = since ?? Date.now();
+        this._renderSince(p.since);
+        if (this._trackingToday) {
+          this._selectedDate = new Date();
+          void this._loadDay();
+        }
       }
+      this._bootstrapped = true;
+      this._errStreak = 0;
+      this._skipCount = 0;
       this._render(p);
+      if (this._elErr.style.display !== "none") this._elErr.style.display = "none";
     } catch (e: unknown) {
+      this._errStreak++;
       this._showErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      this._polling = false;
     }
   }
 
@@ -357,8 +441,7 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
     let maxDur = 0;
     for (const r of records) {
       const name = this._presenceName(r["_msdyn_presenceid_value"] as string);
-      const st = new Date(r["msdyn_starttime"] as string).getTime();
-      const en = r["msdyn_endtime"] ? new Date(r["msdyn_endtime"] as string).getTime() : Date.now();
+      const { st, en } = this._span(r);
       const dur = en - st;
       totals[name] = (totals[name] || 0) + dur;
       if (dur > maxDur) maxDur = dur;
@@ -367,20 +450,27 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
     const sortedNames = Object.keys(totals).sort((a, b) => totals[b] - totals[a]);
     let sumHtml = "";
     for (const n of sortedNames) {
-      sumHtml += `<div class="sum-chip"><div class="sum-dot" style="background:${color(n)}"></div><span>${esc(n)}</span> <span class="sum-val">${fmtShort(totals[n])}</span></div>`;
+      sumHtml += `<div class="sum-chip"><div class="sum-dot" style="background:${color(n)}">${statusIcon(n)}</div><span>${esc(n)}</span> <span class="sum-val">${fmtShort(totals[n])}</span></div>`;
     }
     this._elSum.innerHTML = sumHtml;
+
+    let filteredMaxDur = 0;
+    for (const r of records) {
+      const { st, en } = this._span(r);
+      const dur = en - st;
+      if (dur > filteredMaxDur) filteredMaxDur = dur;
+    }
 
     let html = '<div class="tl">';
     for (const r of records) {
       const name = this._presenceName(r["_msdyn_presenceid_value"] as string);
       const c = color(name);
-      const st = new Date(r["msdyn_starttime"] as string).getTime();
-      const en = r["msdyn_endtime"] ? new Date(r["msdyn_endtime"] as string).getTime() : Date.now();
+      const { st, en } = this._span(r);
       const dur = en - st;
-      const barPct = maxDur > 0 ? Math.max(4, Math.round((dur / maxDur) * 100)) : 100;
+      const barPct = filteredMaxDur > 0 ? Math.max(4, Math.round((dur / filteredMaxDur) * 100)) : 100;
+      const openEnded = !r["msdyn_endtime"] && isToday(this._selectedDate);
 
-      html += `<div class="tl-item"><div class="tl-dot" style="background:${c}"></div><div class="tl-body"><div class="tl-row"><span class="tl-name">${esc(name)}</span><span class="tl-dur">${fmtShort(dur)}</span></div><div class="tl-time">${fmtTimeRange(r["msdyn_starttime"] as string, (r["msdyn_endtime"] as string) || null)}</div><div class="tl-bar" style="width:${barPct}%;background:${c}"></div></div></div>`;
+      html += `<div class="tl-item"><div class="tl-dot" style="background:${c}">${statusIcon(name)}</div><div class="tl-body"><div class="tl-row"><span class="tl-name">${esc(name)}</span><span class="tl-dur">${fmtShort(dur)}</span></div><div class="tl-time">${fmtTimeRange(new Date(st).toISOString(), openEnded ? null : new Date(en).toISOString())}</div><div class="tl-bar" style="width:${barPct}%;background:${c}"></div></div></div>`;
     }
     html += "</div>";
     this._elTL.innerHTML = html;
@@ -420,7 +510,7 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
     const d = new Date(this._selectedDate);
     d.setDate(d.getDate() + offset);
     if (d > new Date()) return;
-    this._selectedDate = d;
+    this._setSelectedDate(d);
     this._loadDay();
   }
 
@@ -480,7 +570,7 @@ export class PresenceTimer implements ComponentFramework.StandardControl<IInputs
     this._elCalOverlay.querySelectorAll(".cal-day:not(.cal-dis)").forEach((btn) => {
       btn.addEventListener("click", () => {
         const day = parseInt((btn as HTMLElement).dataset.day || "1", 10);
-        this._selectedDate = new Date(year, month, day);
+        this._setSelectedDate(new Date(year, month, day));
         this._calOpen = false;
         this._elCalOverlay.style.display = "none";
         this._loadDay();

@@ -21,3 +21,13 @@
 
 # macos
 .DS_Store
+
+# Solution project is intentionally not tracked in this repo — release zips are built
+# locally and uploaded to GitHub Releases by hand (see README).
+Solution/
+
+# exported zips
+*.zip
+
+# jest
+/coverage

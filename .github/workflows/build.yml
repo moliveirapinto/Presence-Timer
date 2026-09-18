@@ -1,0 +1,32 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Solution/ is intentionally NOT committed in this repo (release zips are built locally and
+# uploaded to Releases by hand) — this workflow only builds and tests the control itself.
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check version consistency
+        run: npm run version:check
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build control
+        run: npm run build

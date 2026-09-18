@@ -2,11 +2,14 @@
 .presence-timer *,.presence-timer *::before,.presence-timer *::after{box-sizing:border-box}
 .presence-timer .card{text-align:center;padding:20px 12px 8px}
 .presence-timer .pill{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:16px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:14px}
-.presence-timer .dot{width:8px;height:8px;border-radius:50%;background:#92c353;flex-shrink:0;animation:pt-pulse 2s ease-in-out infinite}
+.presence-timer .dot{width:8px;height:8px;border-radius:50%;background:#92c353;flex-shrink:0;animation:pt-pulse 2s ease-in-out infinite;display:flex;align-items:center;justify-content:center;position:relative}
 @keyframes pt-pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.presence-timer .dot-icon{width:6px;height:6px;display:block;overflow:visible}
+.presence-timer .dot-minus{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:5px;height:1.3px;background:#fff;border-radius:1px}
 .presence-timer .name{font-size:12px;font-weight:600;color:#333;letter-spacing:.2px;white-space:nowrap}
 .presence-timer .time{font-size:28px;font-weight:200;font-variant-numeric:tabular-nums;color:#1a1a1a;letter-spacing:1.5px;line-height:1.2}
 .presence-timer .lbl{font-size:10px;color:#999;text-transform:uppercase;letter-spacing:1.2px;margin-top:4px}
+.presence-timer .since{font-size:10px;color:#aaa;margin-top:3px;font-variant-numeric:tabular-nums}
 .presence-timer .err{font-size:11px;color:#c4314b;margin-top:8px;display:none}
 
 .presence-timer .dp-wrap{display:flex;align-items:center;justify-content:center;gap:6px;margin:14px 12px 4px}
@@ -18,7 +21,8 @@
 
 .presence-timer .summary{display:flex;justify-content:center;gap:12px;margin:8px 12px 4px;flex-wrap:wrap}
 .presence-timer .sum-chip{display:flex;align-items:center;gap:4px;font-size:10px;color:#555}
-.presence-timer .sum-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.presence-timer .sum-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.presence-timer .sum-dot .dot-icon{width:4.5px;height:4.5px}
 .presence-timer .sum-val{font-weight:600;font-variant-numeric:tabular-nums}
 
 .presence-timer .hist{padding:0 12px 16px}
@@ -27,7 +31,8 @@
 .presence-timer .tl{position:relative;padding-left:20px}
 .presence-timer .tl::before{content:'';position:absolute;left:5px;top:4px;bottom:4px;width:1px;background:#e0e0e0}
 .presence-timer .tl-item{position:relative;padding:6px 0;display:flex;align-items:flex-start;gap:8px}
-.presence-timer .tl-dot{position:absolute;left:-19px;top:9px;width:9px;height:9px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.08);flex-shrink:0;z-index:1}
+.presence-timer .tl-dot{position:absolute;left:-19px;top:9px;width:9px;height:9px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.08);flex-shrink:0;z-index:1;display:flex;align-items:center;justify-content:center}
+.presence-timer .tl-dot .dot-icon{width:6px;height:6px}
 .presence-timer .tl-body{flex:1;min-width:0}
 .presence-timer .tl-row{display:flex;align-items:center;justify-content:space-between;gap:4px}
 .presence-timer .tl-name{font-size:11px;font-weight:600;color:#333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
